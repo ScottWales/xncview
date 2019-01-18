@@ -6,6 +6,8 @@ xncview
 
 An implementation of `ncview <http://meteora.ucsd.edu/%7Epierce/ncview_home_page.html>`_ using Python+Xarray
 
+.. image:: xncview.png
+
 Can be accessed on the command line::
 
     xncview test.py
