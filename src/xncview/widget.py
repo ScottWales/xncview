@@ -51,29 +51,73 @@ class Widget(QW.QWidget):
 
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
+        self.axis = self.canvas.figure.subplots()
 
         main_layout.addWidget(self.canvas)
 
-        # Setup list of variables, further setup is done by change_variable()
+        #: Dataset being inspected
         self.dataset = dataset
+
+        # Setup list of variables, further setup is done by change_variable()
         variables = [d.name for d in dataset.data_vars.values() if d.ndim >= 2]
         self.varlist.addItems(variables)
+
+        # Connect slots
         self.varlist.currentIndexChanged.connect(self.change_variable)
+        self.xdim.activated.connect(self.redraw)
+        self.ydim.activated.connect(self.redraw)
 
+        #: Currently active variable
         self.variable = None
+
+        #: Values for non-axis dimensions
+        self.passive_dims = {}
+
         if len(variables) > 0:
-            self.varlist.setCurrentIndex(0)
+            self.change_variable()
 
-        self.redraw()
 
-    def change_variable(self, index):
+    def change_variable(self, index=0):
+        """
+        The active variable has changed
+        """
+        old_dims = []
+        if self.variable is not None:
+            old_dims = self.variable.dims
+
         varname = self.varlist.currentText()
         self.variable = self.dataset[varname]
 
-        self.xdim.clear()
-        self.xdim.addItems(self.variable.dims)
-        self.ydim.clear()
-        self.ydim.addItems(self.variable.dims)
+        if set(self.variable.dims) != set(old_dims):
+            # Refresh dimensions
+            self.passive_dims = {d:0 for d in self.variable.dims}
+
+            self.xdim.clear()
+            self.xdim.addItems(self.variable.dims)
+            self.xdim.setCurrentIndex(1)
+
+            self.ydim.clear()
+            self.ydim.addItems(self.variable.dims)
+            self.ydim.setCurrentIndex(0)
+
+        self.redraw()
+
 
     def redraw(self):
-        pass
+        self.axis.clear()
+
+        x = self.xdim.currentText()
+        y = self.ydim.currentText()
+
+        if x != y:
+            v = self.variable
+
+            # Flatten passive dims
+            for d, i in self.passive_dims.items():
+                if d not in [x,y]:
+                    v = v.isel({d:i})
+
+            # Plot data
+            v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis)
+
+        self.canvas.draw()

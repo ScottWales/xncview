@@ -31,6 +31,7 @@ def test_variable_names(qtbot):
     widget = xncview.Widget(ds)
     assert widget.varlist.count() == 2
 
+
 def test_variable_dims(qtbot):
     ds = xarray.Dataset({
         'a': (['x'], numpy.zeros((2,))),

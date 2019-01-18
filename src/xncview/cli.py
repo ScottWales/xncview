@@ -16,21 +16,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .xncview import xncview
+from . import xncview
 
 import argparse
 import sys
 import xarray
 
+
 def main():
+    """
+    Preview a NetCDF file
+    """
     parser = argparse.ArgumentParser()
-    #parser.add_argument('input')
+    parser.add_argument('input')
 
     args = parser.parse_args()
 
-    #dataset = xarray.open_dataset(args.input)
-    dataset = xarray.Dataset()
-    xncview(dataset)
+    dataset = xarray.open_dataset(args.input)
     xncview(dataset)
 
 

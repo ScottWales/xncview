@@ -16,6 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .widget import Widget
+
 import sys
 from matplotlib.backends.qt_compat import QtWidgets as QW
 
