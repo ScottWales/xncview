@@ -16,5 +16,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def xncview(path):
-    pass
+import sys
+from matplotlib.backends.qt_compat import QtWidgets as QW
+
+
+def xncview(dataset):
+    """
+    Starts a QT window to display the data
+
+    Args:
+        dataset: xarray.Dataset
+    """
+    QApp = QW.QApplication.instance()
+    if QApp is None:
+        QApp = QW.QApplication(sys.argv)
+
+    widget = Widget(dataset)
+    widget.show()
+
+    return QApp.exec_()
