@@ -1,0 +1,36 @@
+{% set data = load_setup_py_data() %}
+
+package:
+    name: xncview
+    version: {{ data['version'] }}
+
+source:
+    path: ./
+
+requirements:
+    host:
+        - python >= 3.5
+        - pip
+    run:
+        - python
+        - matplotlib
+        - xarray
+
+build:
+    noarch: python
+    script: "{{ PYTHON }} -m pip install . -vv"
+
+test:
+    files:
+        - test
+    requires:
+        - pytest-qt
+    commands:
+        - py.test
+
+about:
+    home: {{ data['url'] }}
+    summary: {{ data['description'] }}
+    license_file: LICENSE
+
+
