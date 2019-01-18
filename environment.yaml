@@ -1,0 +1,9 @@
+name: xncview
+channels:
+        - conda-forge
+dependencies:
+        - python
+        - matplotlib
+        - xarray
+        - git
+        - pytest-qt
