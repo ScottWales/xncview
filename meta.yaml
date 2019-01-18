@@ -27,6 +27,7 @@ test:
         - test
     requires:
         - pytest-qt
+        - pytest-xvfb
     commands:
         - py.test
 
