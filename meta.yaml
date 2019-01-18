@@ -15,7 +15,6 @@ requirements:
         - python
         - matplotlib
         - xarray
-        - {{ pin_compatible('numpy') }}
 
 build:
     noarch: python
