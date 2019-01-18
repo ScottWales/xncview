@@ -1,0 +1,2 @@
+include versioneer.py
+include src/xncview/_version.py
