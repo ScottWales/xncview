@@ -10,7 +10,7 @@ An implementation of `ncview <http://meteora.ucsd.edu/%7Epierce/ncview_home_page
 
 Can be accessed on the command line::
 
-    xncview test.py
+    xncview test.nc
 
 Or set up an Xarray Dataset in Python::
 
