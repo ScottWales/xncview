@@ -21,6 +21,8 @@ from matplotlib.backends.qt_compat import QtWidgets as QW, QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
 import numpy
+import dask.array
+from .interpret_cf import *
 
 
 class DimensionWidget(QW.QWidget):
@@ -54,7 +56,7 @@ class DimensionWidget(QW.QWidget):
         self.slider.setValue(0)
         self.slider.valueChanged.connect(self._update_from_slider)
 
-        self.textbox.textChanged.connect(self._update_from_value)
+        self.textbox.returnPressed.connect(self._update_from_value)
 
         main_layout.addWidget(self.title)
         main_layout.addWidget(self.textbox)
@@ -62,7 +64,8 @@ class DimensionWidget(QW.QWidget):
 
 
 
-    def _update_from_value(self, value):
+    def _update_from_value(self):
+        value = self.textbox.text()
         value = numpy.asscalar(numpy.array(value, dtype=self.dimension.dtype))
         index = self.dimension.to_index().get_loc(value, method='nearest')
         self.slider.setValue(index)
@@ -78,7 +81,7 @@ class DimensionWidget(QW.QWidget):
         The current slider index
         """
         return self.slider.value()
-    
+
 
 class Widget(QW.QWidget):
     """
@@ -152,6 +155,9 @@ class Widget(QW.QWidget):
 
         varname = self.varlist.currentText()
         self.variable = self.dataset[varname]
+        print(self.variable)
+
+        self.bounds = dask.array.stack([self.variable.min(), self.variable.max()]).compute()
 
         if set(self.variable.dims) != set(old_dims):
             self.update_dimensions()
@@ -166,11 +172,21 @@ class Widget(QW.QWidget):
         # Refresh dimensions
         self.xdim.clear()
         self.xdim.addItems(self.variable.dims)
-        self.xdim.setCurrentIndex(1)
+
+        x = 0
+        lon = identify_lon(self.variable)
+        if lon is not None:
+            x = self.xdim.findText(lon)
+        self.xdim.setCurrentIndex(x)
 
         self.ydim.clear()
         self.ydim.addItems(self.variable.dims)
-        self.ydim.setCurrentIndex(0)
+
+        y = 1
+        lat = identify_lat(self.variable)
+        if lat is not None:
+            y = self.ydim.findText(lat)
+        self.ydim.setCurrentIndex(y)
 
         for d, w in self.dims.items():
             w.setVisible(d in self.variable.dims)
@@ -196,8 +212,8 @@ class Widget(QW.QWidget):
 
             # Plot data
             try:
-                v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis)
-            except Exception:
-                pass
+                v.plot.imshow(x, y, add_colorbar=False, ax=self.axis, clim=self.bounds)
+            except Exception as e:
+                print(e)
 
         self.canvas.draw()

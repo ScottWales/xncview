@@ -32,7 +32,7 @@ def main():
 
     args = parser.parse_args()
 
-    dataset = xarray.open_dataset(args.input)
+    dataset = xarray.open_dataset(args.input, chunks={'time':1})
     xncview(dataset)
 
 
