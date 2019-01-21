@@ -17,9 +17,67 @@
 # limitations under the License.
 
 import sys
-from matplotlib.backends.qt_compat import QtWidgets as QW
+from matplotlib.backends.qt_compat import QtWidgets as QW, QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
+import numpy
+
+
+class DimensionWidget(QW.QWidget):
+    """
+    Widget to select dimensions
+    """
+
+    #: Signal emitted when value is changed
+    valueChanged = QtCore.Signal(int)
+
+    def __init__(self, dimension):
+        """
+        Construct the widget
+
+        Args:
+            dimension: xarray.DataArray
+        """
+        super().__init__()
+
+        main_layout = QW.QHBoxLayout(self)
+
+        #: The dimension represented by this widget
+        self.dimension = dimension
+
+        self.title = QW.QLabel(dimension.name)
+        self.textbox = QW.QLineEdit()
+        self.slider = QW.QSlider(orientation=QtCore.Qt.Horizontal)
+
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(dimension.size-1)
+        self.slider.setValue(0)
+        self.slider.valueChanged.connect(self._update_from_slider)
+
+        self.textbox.textChanged.connect(self._update_from_value)
+
+        main_layout.addWidget(self.title)
+        main_layout.addWidget(self.textbox)
+        main_layout.addWidget(self.slider)
+
+
+
+    def _update_from_value(self, value):
+        value = numpy.asscalar(numpy.array(value, dtype=self.dimension.dtype))
+        index = self.dimension.to_index().get_loc(value, method='nearest')
+        self.slider.setValue(index)
+
+
+    def _update_from_slider(self, value):
+        self.textbox.setText(str(self.dimension[value].values))
+        self.valueChanged.emit(value)
+    
+
+    def value(self):
+        """
+        The current slider index
+        """
+        return self.slider.value()
     
 
 class Widget(QW.QWidget):
@@ -71,7 +129,14 @@ class Widget(QW.QWidget):
         self.variable = None
 
         #: Values for non-axis dimensions
-        self.passive_dims = {}
+        self.dims = {}
+        dims_group = QW.QGroupBox()
+        dims_layout = QW.QVBoxLayout(dims_group)
+        for name in self.dataset.dims:
+            self.dims[name] = DimensionWidget(self.dataset[name])
+            self.dims[name].valueChanged.connect(self.redraw)
+            dims_layout.addWidget(self.dims[name])
+        main_layout.addWidget(dims_group)
 
         if len(variables) > 0:
             self.change_variable()
@@ -89,18 +154,26 @@ class Widget(QW.QWidget):
         self.variable = self.dataset[varname]
 
         if set(self.variable.dims) != set(old_dims):
-            # Refresh dimensions
-            self.passive_dims = {d:0 for d in self.variable.dims}
-
-            self.xdim.clear()
-            self.xdim.addItems(self.variable.dims)
-            self.xdim.setCurrentIndex(1)
-
-            self.ydim.clear()
-            self.ydim.addItems(self.variable.dims)
-            self.ydim.setCurrentIndex(0)
+            self.update_dimensions()
 
         self.redraw()
+
+
+    def update_dimensions(self):
+        """
+        Update dimension lists based on the current variable
+        """
+        # Refresh dimensions
+        self.xdim.clear()
+        self.xdim.addItems(self.variable.dims)
+        self.xdim.setCurrentIndex(1)
+
+        self.ydim.clear()
+        self.ydim.addItems(self.variable.dims)
+        self.ydim.setCurrentIndex(0)
+
+        for d, w in self.dims.items():
+            w.setVisible(d in self.variable.dims)
 
 
     def redraw(self):
@@ -109,15 +182,22 @@ class Widget(QW.QWidget):
         x = self.xdim.currentText()
         y = self.ydim.currentText()
 
+        passive_dims = set(self.variable.dims) - set([x,y])
+        for d, w in self.dims.items():
+            w.setVisible(d in passive_dims)
+
         if x != y:
             v = self.variable
 
             # Flatten passive dims
-            for d, i in self.passive_dims.items():
+            for d in self.variable.dims:
                 if d not in [x,y]:
-                    v = v.isel({d:i})
+                    v = v.isel({d:self.dims[d].value()})
 
             # Plot data
-            v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis)
+            try:
+                v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis)
+            except Exception:
+                pass
 
         self.canvas.draw()
