@@ -82,5 +82,31 @@ def main_oasis():
     xncview(ds_out)
 
 
+def main_iris():
+    import iris
+    from iris.fileformats.um import structured_um_loading
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input')
+
+    args = parser.parse_args()
+
+    print("Loading...")
+    with structured_um_loading():
+        cubes = iris.load(args.input)
+    print("Loaded")
+        
+    das = {}
+    for c in cubes:
+        name = c.name()
+        das[name] = xarray.DataArray.from_iris(c)
+
+        if name == 'air_potential_temperature':
+            das[name] = das[name].rename(level_height='level_height_1', sigma='sigma_1')
+
+    print(das)
+    dataset = xarray.Dataset(das)
+    xncview(dataset)
+
+
 if __name__ == '__main__':
     main()
