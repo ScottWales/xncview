@@ -120,7 +120,8 @@ class Widget(QW.QWidget):
         self.dataset = dataset
 
         # Setup list of variables, further setup is done by change_variable()
-        variables = [d.name for d in dataset.data_vars.values() if d.ndim >= 2]
+        classes = classify_vars(dataset)
+        variables = [v for v in classes['data'] if dataset[v].ndim >= 2]
         self.varlist.addItems(variables)
 
         # Connect slots
@@ -135,7 +136,7 @@ class Widget(QW.QWidget):
         self.dims = {}
         dims_group = QW.QGroupBox()
         dims_layout = QW.QVBoxLayout(dims_group)
-        for name in self.dataset.dims:
+        for name in self.dataset.coords:
             self.dims[name] = DimensionWidget(self.dataset[name])
             self.dims[name].valueChanged.connect(self.redraw)
             dims_layout.addWidget(self.dims[name])
@@ -155,6 +156,7 @@ class Widget(QW.QWidget):
 
         varname = self.varlist.currentText()
         self.variable = self.dataset[varname]
+        print('\nVariable details:')
         print(self.variable)
 
         self.bounds = dask.array.stack([self.variable.min(), self.variable.max()]).compute()
@@ -171,7 +173,7 @@ class Widget(QW.QWidget):
         """
         # Refresh dimensions
         self.xdim.clear()
-        self.xdim.addItems(self.variable.dims)
+        self.xdim.addItems(self.variable.coords)
 
         x = 0
         lon = identify_lon(self.variable)
@@ -180,7 +182,7 @@ class Widget(QW.QWidget):
         self.xdim.setCurrentIndex(x)
 
         self.ydim.clear()
-        self.ydim.addItems(self.variable.dims)
+        self.ydim.addItems(self.variable.coords)
 
         y = 1
         lat = identify_lat(self.variable)
@@ -189,7 +191,7 @@ class Widget(QW.QWidget):
         self.ydim.setCurrentIndex(y)
 
         for d, w in self.dims.items():
-            w.setVisible(d in self.variable.dims)
+            w.setVisible(d in self.variable.coords)
 
 
     def redraw(self):
@@ -198,7 +200,7 @@ class Widget(QW.QWidget):
         x = self.xdim.currentText()
         y = self.ydim.currentText()
 
-        passive_dims = set(self.variable.dims) - set([x,y])
+        passive_dims = set(self.variable.coords) - set([x,y])
         for d, w in self.dims.items():
             w.setVisible(d in passive_dims)
 
@@ -206,14 +208,20 @@ class Widget(QW.QWidget):
             v = self.variable
 
             # Flatten passive dims
-            for d in self.variable.dims:
+            for d in self.variable.coords:
                 if d not in [x,y]:
                     v = v.isel({d:self.dims[d].value()})
 
             # Plot data
             try:
-                v.plot.imshow(x, y, add_colorbar=False, ax=self.axis, clim=self.bounds)
+                v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis, clim=self.bounds)
             except Exception as e:
                 print(e)
 
         self.canvas.draw()
+
+
+    def update_axes(self):
+        self.axis.remove()
+        self.axis = self.canvas.figure.axes(projection=cartopy.crs.PlateCarree())
+        self.axis.coastlines()

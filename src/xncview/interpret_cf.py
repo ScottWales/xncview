@@ -38,8 +38,7 @@ lon_units = set((
 def identify_lat(variable):
     lat_dims = []
 
-    for d in variable.dims:
-        dim = variable[d]
+    for d, dim in variable.coords.items():
 
         if (dim.attrs.get('axis', None) == 'Y' or 
             dim.attrs.get('standard_name', None) == 'latitude' or
@@ -58,8 +57,7 @@ def identify_lat(variable):
 def identify_lon(variable):
     lon_dims = []
 
-    for d in variable.dims:
-        dim = variable[d]
+    for d, dim in variable.coords.items():
 
         if (dim.attrs.get('axis', None) == 'X' or 
             dim.attrs.get('standard_name', None) == 'longitude' or
@@ -73,4 +71,19 @@ def identify_lon(variable):
         return None
     else:
         return lon_dims[0]
+
+
+def classify_vars(dataset):
+    bounds = set()
+    coords = set()
+
+    for name, var in dataset.variables.items():
+        if 'bounds' in var.attrs:
+            bounds.add(var.attrs['bounds'])
+
+        if 'coordinates' in var.attrs:
+            coords.update(var.attrs['coordinates'].split())
+
+    data = set(dataset.variables.keys()) - bounds - coords
+    return {'bounds': bounds, 'coords': coords, 'data': data}
 
