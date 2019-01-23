@@ -15,6 +15,7 @@ requirements:
         - python
         - matplotlib
         - xarray
+        - dask
 
 build:
     noarch: python
