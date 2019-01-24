@@ -43,15 +43,15 @@ def main_oasis():
     Preview an Oasis dump file
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('input')
+    parser.add_argument('input', nargs='*')
     parser.add_argument('--rundir', default=None)
     parser.add_argument('--grid', '-g', required=True)
 
     args = parser.parse_args()
     if args.rundir is None:
-        args.rundir = os.path.dirname(args.input)
+        args.rundir = os.path.dirname(args.input[0])
 
-    dataset = xarray.open_dataset(args.input, chunks={'time':1})
+    dataset = xarray.open_mfdataset(args.input, chunks={'time':1})
 
     masks = xarray.open_dataset(os.path.join(args.rundir, 'masks.nc'))
     grids = xarray.open_dataset(os.path.join(args.rundir, 'grids.nc'))
