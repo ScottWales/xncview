@@ -19,6 +19,7 @@
 from xncview.widget import DimensionWidget
 import xarray
 
+from matplotlib.backends.qt_compat import QtCore
 
 def test_update_value(qtbot):
     """
@@ -27,9 +28,12 @@ def test_update_value(qtbot):
     da = xarray.DataArray([1,2,3],name='test', coords=[('x',[1,2,3])])
 
     widget = DimensionWidget(da.x)
+    qtbot.addWidget(widget)
+
     assert widget.value() == 0
 
     widget.textbox.setText('2')
+    qtbot.keyClick(widget.textbox, QtCore.Qt.Key_Enter)
     assert widget.value() == 1
 
 
