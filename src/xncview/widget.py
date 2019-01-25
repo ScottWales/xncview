@@ -20,8 +20,12 @@ import sys
 from matplotlib.backends.qt_compat import QtWidgets as QW, QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 import numpy
 import dask.array
+import xarray
+import cartopy.crs
+import cartopy.mpl.geoaxes
 from .interpret_cf import *
 
 
@@ -53,10 +57,11 @@ class DimensionWidget(QW.QWidget):
 
         self.slider.setMinimum(0)
         self.slider.setMaximum(dimension.size-1)
-        self.slider.setValue(0)
-        self.slider.valueChanged.connect(self._update_from_slider)
 
+        self.slider.valueChanged.connect(self._update_from_slider)
         self.textbox.returnPressed.connect(self._update_from_value)
+
+        self.slider.setValue(0)
 
         main_layout.addWidget(self.title)
         main_layout.addWidget(self.textbox)
@@ -81,6 +86,62 @@ class DimensionWidget(QW.QWidget):
         The current slider index
         """
         return self.slider.value()
+
+
+class ColorBarWidget(QW.QWidget):
+    """
+    Contains the colour bar and controls to change bounds
+    """
+
+    valueChanged = QtCore.Signal(float, float)
+
+    def __init__(self):
+        super().__init__()
+
+        main_layout = QW.QVBoxLayout(self)
+
+        figure = Figure()
+        figure.set_frameon(False)
+        self.canvas = FigureCanvas(figure)
+        self.canvas.setStyleSheet("background-color:transparent;")
+        self.axis = self.canvas.figure.add_axes([0, 0.05, 0.2, 0.9])
+
+        self.upperTextBox = QW.QLineEdit()
+        self.lowerTextBox = QW.QLineEdit()
+
+        main_layout.addWidget(self.upperTextBox)
+        main_layout.addWidget(self.canvas)
+        main_layout.addWidget(self.lowerTextBox)
+
+        #: Colour bar limits
+        self.bounds = [numpy.nan, numpy.nan]
+
+        self.setFixedWidth(80)
+
+    def setBounds(self, bounds):
+        self.bounds = bounds
+
+        self.lowerTextBox.setText("%.2e"%bounds[0])
+        self.upperTextBox.setText("%.2e"%bounds[1])
+
+    def redraw(self, plot):
+        """
+        Redraw the colour bar
+        """
+        self.axis.clear()
+        if plot is not None:
+            plt.colorbar(plot, cax=self.axis)
+
+        self.canvas.draw()
+
+    def get_plot_args(self):
+        kwargs = {}
+        if self.bounds[0] < 0 < self.bounds[1]:
+            kwargs['vmax'] = numpy.abs(self.bounds).max()
+        else:
+            kwargs['vmin'] = self.bounds[0]
+            kwargs['vmax'] = self.bounds[1]
+        return kwargs
 
 
 class Widget(QW.QWidget):
@@ -110,24 +171,34 @@ class Widget(QW.QWidget):
 
         main_layout.addWidget(header)
 
-        self.figure = Figure()
-        self.canvas = FigureCanvas(self.figure)
+        figure_group = QW.QGroupBox()
+        figure_layout = QW.QHBoxLayout(figure_group)
+
+        figure = Figure(tight_layout=True)
+        figure.set_frameon(False)
+        self.canvas = FigureCanvas(figure)
+        self.canvas.setStyleSheet("background-color:transparent;")
         self.axis = self.canvas.figure.subplots()
 
-        main_layout.addWidget(self.canvas)
+        self.colorbar = ColorBarWidget()
+
+        figure_layout.addWidget(self.canvas)
+        figure_layout.addWidget(self.colorbar)
+
+        main_layout.addWidget(figure_group)
 
         #: Dataset being inspected
         self.dataset = dataset
 
         # Setup list of variables, further setup is done by change_variable()
         classes = classify_vars(dataset)
-        variables = [v for v in classes['data'] if dataset[v].ndim >= 2]
+        variables = sorted([v for v in classes['data'] if dataset[v].ndim >= 2])
         self.varlist.addItems(variables)
 
         # Connect slots
         self.varlist.currentIndexChanged.connect(self.change_variable)
-        self.xdim.activated.connect(self.redraw)
-        self.ydim.activated.connect(self.redraw)
+        self.xdim.activated.connect(self.change_axes)
+        self.ydim.activated.connect(self.change_axes)
 
         #: Currently active variable
         self.variable = None
@@ -159,7 +230,7 @@ class Widget(QW.QWidget):
         print('\nVariable details:')
         print(self.variable)
 
-        self.bounds = dask.array.stack([self.variable.min(), self.variable.max()]).compute()
+        self.colorbar.setBounds(dask.array.stack([self.variable.min(), self.variable.max()]).compute())
 
         if set(self.variable.dims) != set(old_dims):
             self.update_dimensions()
@@ -190,8 +261,35 @@ class Widget(QW.QWidget):
             y = self.ydim.findText(lat)
         self.ydim.setCurrentIndex(y)
 
+        self.change_axes()
+
+
+
+    def change_axes(self):
+        """
+        The selected plotting axes have changed
+        """
+        x = self.xdim.currentText()
+        y = self.ydim.currentText()
+
+        passive_dims = set(self.variable.coords) - set([x,y])
         for d, w in self.dims.items():
-            w.setVisible(d in self.variable.coords)
+            w.setVisible(d in passive_dims)
+
+        lon = identify_lon(self.variable)
+        lat = identify_lat(self.variable)
+
+        if not isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x == lon and y == lat):
+            # Convert from standard axes to cartopy
+            self.axis.remove()
+            self.axis = self.canvas.figure.subplots(subplot_kw={
+                'projection': cartopy.crs.PlateCarree(central_longitude=180.0)})
+        elif isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x != lon or y != lat):
+            # Convert from cartopy to standard axes
+            self.axis.remove()
+            self.axis = self.canvas.figure.subplots()
+
+        self.redraw()
 
 
     def redraw(self):
@@ -200,28 +298,29 @@ class Widget(QW.QWidget):
         x = self.xdim.currentText()
         y = self.ydim.currentText()
 
-        passive_dims = set(self.variable.coords) - set([x,y])
-        for d, w in self.dims.items():
-            w.setVisible(d in passive_dims)
-
+        plot = None
         if x != y:
             v = self.variable
 
-            # Flatten passive dims
-            for d in self.variable.coords:
-                if d not in [x,y]:
-                    v = v.isel({d:self.dims[d].value()})
+            plot_args = {}
+            if isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes):
+                plot_args['transform'] = cartopy.crs.PlateCarree()
+                self.axis.coastlines(alpha=0.2)
+
+            # # Flatten passive dims
+            # for d in self.variable.coords:
+            #     if d not in [x,y]:
+            #         v = v.isel({d:self.dims[d].value()})
 
             # Plot data
             try:
-                v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis, clim=self.bounds)
+                plot = v.plot.pcolormesh(x, y, ax=self.axis,
+                        add_colorbar=False,
+                        **plot_args,
+                        **self.colorbar.get_plot_args(),
+                        )
             except Exception as e:
                 print(e)
 
         self.canvas.draw()
-
-
-    def update_axes(self):
-        self.axis.remove()
-        self.axis = self.canvas.figure.axes(projection=cartopy.crs.PlateCarree())
-        self.axis.coastlines()
+        self.colorbar.redraw(plot)
