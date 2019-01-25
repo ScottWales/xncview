@@ -9,3 +9,4 @@ dependencies:
         - pytest-qt
         - netcdf4
         - dask
+        - cartopy

@@ -24,6 +24,8 @@ import matplotlib.pyplot as plt
 import numpy
 import dask.array
 import xarray
+import cartopy.crs
+import cartopy.mpl.geoaxes
 from .interpret_cf import *
 
 
@@ -102,7 +104,7 @@ class ColorBarWidget(QW.QWidget):
         figure.set_frameon(False)
         self.canvas = FigureCanvas(figure)
         self.canvas.setStyleSheet("background-color:transparent;")
-        self.axis = self.canvas.figure.add_axes([0, 0.1, 0.2, 0.8])
+        self.axis = self.canvas.figure.add_axes([0, 0.05, 0.2, 0.9])
 
         self.upperTextBox = QW.QLineEdit()
         self.lowerTextBox = QW.QLineEdit()
@@ -172,8 +174,10 @@ class Widget(QW.QWidget):
         figure_group = QW.QGroupBox()
         figure_layout = QW.QHBoxLayout(figure_group)
 
-        self.figure = Figure()
-        self.canvas = FigureCanvas(self.figure)
+        figure = Figure(tight_layout=True)
+        figure.set_frameon(False)
+        self.canvas = FigureCanvas(figure)
+        self.canvas.setStyleSheet("background-color:transparent;")
         self.axis = self.canvas.figure.subplots()
 
         self.colorbar = ColorBarWidget()
@@ -193,8 +197,8 @@ class Widget(QW.QWidget):
 
         # Connect slots
         self.varlist.currentIndexChanged.connect(self.change_variable)
-        self.xdim.activated.connect(self.redraw)
-        self.ydim.activated.connect(self.redraw)
+        self.xdim.activated.connect(self.change_axes)
+        self.ydim.activated.connect(self.change_axes)
 
         #: Currently active variable
         self.variable = None
@@ -257,8 +261,35 @@ class Widget(QW.QWidget):
             y = self.ydim.findText(lat)
         self.ydim.setCurrentIndex(y)
 
+        self.change_axes()
+
+
+
+    def change_axes(self):
+        """
+        The selected plotting axes have changed
+        """
+        x = self.xdim.currentText()
+        y = self.ydim.currentText()
+
+        passive_dims = set(self.variable.coords) - set([x,y])
         for d, w in self.dims.items():
-            w.setVisible(d in self.variable.coords)
+            w.setVisible(d in passive_dims)
+
+        lon = identify_lon(self.variable)
+        lat = identify_lat(self.variable)
+
+        if not isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x == lon and y == lat):
+            # Convert from standard axes to cartopy
+            self.axis.remove()
+            self.axis = self.canvas.figure.subplots(subplot_kw={
+                'projection': cartopy.crs.PlateCarree(central_longitude=180.0)})
+        elif isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x != lon or y != lat):
+            # Convert from cartopy to standard axes
+            self.axis.remove()
+            self.axis = self.canvas.figure.subplots()
+
+        self.redraw()
 
 
     def redraw(self):
@@ -267,13 +298,14 @@ class Widget(QW.QWidget):
         x = self.xdim.currentText()
         y = self.ydim.currentText()
 
-        passive_dims = set(self.variable.coords) - set([x,y])
-        for d, w in self.dims.items():
-            w.setVisible(d in passive_dims)
-
         plot = None
         if x != y:
             v = self.variable
+
+            plot_args = {}
+            if isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes):
+                plot_args['transform'] = cartopy.crs.PlateCarree()
+                self.axis.coastlines(alpha=0.2)
 
             # # Flatten passive dims
             # for d in self.variable.coords:
@@ -284,6 +316,7 @@ class Widget(QW.QWidget):
             try:
                 plot = v.plot.pcolormesh(x, y, ax=self.axis,
                         add_colorbar=False,
+                        **plot_args,
                         **self.colorbar.get_plot_args(),
                         )
             except Exception as e:
@@ -291,9 +324,3 @@ class Widget(QW.QWidget):
 
         self.canvas.draw()
         self.colorbar.redraw(plot)
-
-
-    def update_axes(self):
-        self.axis.remove()
-        self.axis = self.canvas.figure.axes(projection=cartopy.crs.PlateCarree())
-        self.axis.coastlines()
