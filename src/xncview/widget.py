@@ -20,8 +20,10 @@ import sys
 from matplotlib.backends.qt_compat import QtWidgets as QW, QtCore
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 import numpy
 import dask.array
+import xarray
 from .interpret_cf import *
 
 
@@ -53,10 +55,11 @@ class DimensionWidget(QW.QWidget):
 
         self.slider.setMinimum(0)
         self.slider.setMaximum(dimension.size-1)
-        self.slider.setValue(0)
-        self.slider.valueChanged.connect(self._update_from_slider)
 
+        self.slider.valueChanged.connect(self._update_from_slider)
         self.textbox.returnPressed.connect(self._update_from_value)
+
+        self.slider.setValue(0)
 
         main_layout.addWidget(self.title)
         main_layout.addWidget(self.textbox)
@@ -81,6 +84,62 @@ class DimensionWidget(QW.QWidget):
         The current slider index
         """
         return self.slider.value()
+
+
+class ColorBarWidget(QW.QWidget):
+    """
+    Contains the colour bar and controls to change bounds
+    """
+
+    valueChanged = QtCore.Signal(float, float)
+
+    def __init__(self):
+        super().__init__()
+
+        main_layout = QW.QVBoxLayout(self)
+
+        figure = Figure()
+        figure.set_frameon(False)
+        self.canvas = FigureCanvas(figure)
+        self.canvas.setStyleSheet("background-color:transparent;")
+        self.axis = self.canvas.figure.add_axes([0, 0.1, 0.2, 0.8])
+
+        self.upperTextBox = QW.QLineEdit()
+        self.lowerTextBox = QW.QLineEdit()
+
+        main_layout.addWidget(self.upperTextBox)
+        main_layout.addWidget(self.canvas)
+        main_layout.addWidget(self.lowerTextBox)
+
+        #: Colour bar limits
+        self.bounds = [numpy.nan, numpy.nan]
+
+        self.setFixedWidth(80)
+
+    def setBounds(self, bounds):
+        self.bounds = bounds
+
+        self.lowerTextBox.setText("%.2e"%bounds[0])
+        self.upperTextBox.setText("%.2e"%bounds[1])
+
+    def redraw(self, plot):
+        """
+        Redraw the colour bar
+        """
+        self.axis.clear()
+        if plot is not None:
+            plt.colorbar(plot, cax=self.axis)
+
+        self.canvas.draw()
+
+    def get_plot_args(self):
+        kwargs = {}
+        if self.bounds[0] < 0 < self.bounds[1]:
+            kwargs['vmax'] = numpy.abs(self.bounds).max()
+        else:
+            kwargs['vmin'] = self.bounds[0]
+            kwargs['vmax'] = self.bounds[1]
+        return kwargs
 
 
 class Widget(QW.QWidget):
@@ -110,18 +169,26 @@ class Widget(QW.QWidget):
 
         main_layout.addWidget(header)
 
+        figure_group = QW.QGroupBox()
+        figure_layout = QW.QHBoxLayout(figure_group)
+
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
         self.axis = self.canvas.figure.subplots()
 
-        main_layout.addWidget(self.canvas)
+        self.colorbar = ColorBarWidget()
+
+        figure_layout.addWidget(self.canvas)
+        figure_layout.addWidget(self.colorbar)
+
+        main_layout.addWidget(figure_group)
 
         #: Dataset being inspected
         self.dataset = dataset
 
         # Setup list of variables, further setup is done by change_variable()
         classes = classify_vars(dataset)
-        variables = [v for v in classes['data'] if dataset[v].ndim >= 2]
+        variables = sorted([v for v in classes['data'] if dataset[v].ndim >= 2])
         self.varlist.addItems(variables)
 
         # Connect slots
@@ -159,7 +226,7 @@ class Widget(QW.QWidget):
         print('\nVariable details:')
         print(self.variable)
 
-        self.bounds = dask.array.stack([self.variable.min(), self.variable.max()]).compute()
+        self.colorbar.setBounds(dask.array.stack([self.variable.min(), self.variable.max()]).compute())
 
         if set(self.variable.dims) != set(old_dims):
             self.update_dimensions()
@@ -204,21 +271,26 @@ class Widget(QW.QWidget):
         for d, w in self.dims.items():
             w.setVisible(d in passive_dims)
 
+        plot = None
         if x != y:
             v = self.variable
 
-            # Flatten passive dims
-            for d in self.variable.coords:
-                if d not in [x,y]:
-                    v = v.isel({d:self.dims[d].value()})
+            # # Flatten passive dims
+            # for d in self.variable.coords:
+            #     if d not in [x,y]:
+            #         v = v.isel({d:self.dims[d].value()})
 
             # Plot data
             try:
-                v.plot.pcolormesh(x, y, add_colorbar=False, ax=self.axis, clim=self.bounds)
+                plot = v.plot.pcolormesh(x, y, ax=self.axis,
+                        add_colorbar=False,
+                        **self.colorbar.get_plot_args(),
+                        )
             except Exception as e:
                 print(e)
 
         self.canvas.draw()
+        self.colorbar.redraw(plot)
 
 
     def update_axes(self):
