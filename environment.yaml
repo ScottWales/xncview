@@ -8,3 +8,4 @@ dependencies:
         - git
         - pytest-qt
         - netcdf4
+        - dask
