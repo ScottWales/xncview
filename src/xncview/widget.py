@@ -207,14 +207,32 @@ class Widget(QW.QWidget):
         self.dims = {}
         dims_group = QW.QGroupBox()
         dims_layout = QW.QVBoxLayout(dims_group)
+
+        # Create widgets for coordinates
         for name in self.dataset.coords:
             self.dims[name] = DimensionWidget(self.dataset[name])
             self.dims[name].valueChanged.connect(self.redraw)
             dims_layout.addWidget(self.dims[name])
+
+        # Create widgets for bare dims
+        for name in self.dataset.dims:
+            if name not in self.dims:
+                da = xarray.DataArray(range(self.dataset.dims[name]))
+                self.dims[name] = DimensionWidget(da)
+                self.dims[name].valueChanged.connect(self.redraw)
+                dims_layout.addWidget(self.dims[name])
+
         main_layout.addWidget(dims_group)
 
         if len(variables) > 0:
             self.change_variable()
+
+
+    def _get_variable_dims(self):
+        """
+        Get the available dimensions for the current variable
+        """
+        return set(self.variable.coords.keys()).union(self.variable.dims)
 
 
     def change_variable(self, index=0):
@@ -223,7 +241,7 @@ class Widget(QW.QWidget):
         """
         old_dims = []
         if self.variable is not None:
-            old_dims = self.variable.dims
+            old_dims = self._get_variable_dims()
 
         varname = self.varlist.currentText()
         self.variable = self.dataset[varname]
@@ -232,7 +250,7 @@ class Widget(QW.QWidget):
 
         self.colorbar.setBounds(dask.array.stack([self.variable.min(), self.variable.max()]).compute())
 
-        if set(self.variable.dims) != set(old_dims):
+        if self._get_variable_dims() != old_dims:
             self.update_dimensions()
 
         self.redraw()
@@ -243,8 +261,10 @@ class Widget(QW.QWidget):
         Update dimension lists based on the current variable
         """
         # Refresh dimensions
+        newdims = sorted(self._get_variable_dims())
+
         self.xdim.clear()
-        self.xdim.addItems(self.variable.coords)
+        self.xdim.addItems(newdims)
 
         x = 0
         lon = identify_lon(self.variable)
@@ -253,7 +273,7 @@ class Widget(QW.QWidget):
         self.xdim.setCurrentIndex(x)
 
         self.ydim.clear()
-        self.ydim.addItems(self.variable.coords)
+        self.ydim.addItems(newdims)
 
         y = 1
         lat = identify_lat(self.variable)
@@ -272,9 +292,12 @@ class Widget(QW.QWidget):
         x = self.xdim.currentText()
         y = self.ydim.currentText()
 
-        passive_dims = set(self.variable.coords) - set([x,y])
+        variable_dims = self._get_variable_dims()
         for d, w in self.dims.items():
-            w.setVisible(d in passive_dims)
+            w.setVisible(d in variable_dims)
+
+        for d in [x, y, *self.variable[x].dims, *self.variable[y].dims]:
+            self.dims[d].setVisible(False)
 
         lon = identify_lon(self.variable)
         lat = identify_lat(self.variable)

@@ -45,3 +45,28 @@ def test_variable_dims(qtbot):
 
     assert widget.xdim.count() == 3
     assert widget.ydim.count() == 3
+
+
+def test_multi_axis(qtbot):
+    ds = xarray.Dataset({
+            'a': (['x','y','t'], numpy.zeros((2,2,2,))),
+        },
+        coords = {
+            'lat': (['x','y'], numpy.zeros((2,2,))),
+            'lon': (['x','y'], numpy.zeros((2,2,))),
+            't': (['t'], [1,2]),
+        })
+    ds.lat.attrs['axis'] = 'Y'
+    ds.lon.attrs['axis'] = 'X'
+    ds.t.attrs['axis'] = 'T'
+
+    widget = xncview.Widget(ds)
+    widget.varlist.setCurrentIndex(widget.varlist.findText('a'))
+
+    assert widget.xdim.currentText() == 'lon'
+    assert widget.ydim.currentText() == 'lat'
+
+    assert widget.dims['t'].isVisibleTo(widget)
+    assert not widget.dims['x'].isVisibleTo(widget)
+    assert not widget.dims['y'].isVisibleTo(widget)
+
