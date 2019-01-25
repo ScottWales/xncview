@@ -31,6 +31,7 @@ def test_update_value(qtbot):
     qtbot.addWidget(widget)
 
     assert widget.value() == 0
+    assert widget.textbox.text() == '1'
 
     widget.textbox.setText('2')
     qtbot.keyClick(widget.textbox, QtCore.Qt.Key_Enter)

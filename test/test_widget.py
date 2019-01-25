@@ -16,8 +16,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from xncview.widget import Widget, _get_variable_dims
+
 import xarray
-import xncview
 import numpy
 
 def test_variable_names(qtbot):
@@ -28,7 +29,7 @@ def test_variable_names(qtbot):
         })
 
     # 'a' should be ignored as it's 1D
-    widget = xncview.Widget(ds)
+    widget = Widget(ds)
     assert widget.varlist.count() == 2
 
 
@@ -40,7 +41,7 @@ def test_variable_dims(qtbot):
         })
 
     # Select 'c', should have 3 dims
-    widget = xncview.Widget(ds)
+    widget = Widget(ds)
     widget.varlist.setCurrentIndex(widget.varlist.findText('c'))
 
     assert widget.xdim.count() == 3
@@ -60,7 +61,7 @@ def test_multi_axis(qtbot):
     ds.lon.attrs['axis'] = 'X'
     ds.t.attrs['axis'] = 'T'
 
-    widget = xncview.Widget(ds)
+    widget = Widget(ds)
     widget.varlist.setCurrentIndex(widget.varlist.findText('a'))
 
     assert widget.xdim.currentText() == 'lon'
@@ -70,3 +71,24 @@ def test_multi_axis(qtbot):
     assert not widget.dims['x'].isVisibleTo(widget)
     assert not widget.dims['y'].isVisibleTo(widget)
 
+
+def test_get_dims(qtbot):
+    ds = xarray.Dataset({
+            'a': (['x','y','z','t'], numpy.zeros((2,2,1,2,))),
+        },
+        coords = {
+            'lat': (['x','y'], numpy.zeros((2,2,))),
+            'lon': (['x','y'], numpy.zeros((2,2,))),
+            't': (['t'], [1,2]),
+            'z': (['z'], [1]),
+        })
+    ds.lat.attrs['axis'] = 'Y'
+    ds.lon.attrs['axis'] = 'X'
+    ds.t.attrs['axis'] = 'T'
+
+    dims = _get_variable_dims(ds.a)
+
+    assert 'lat' in dims
+    assert 'x' in dims
+    assert 't' in dims
+    assert 'z' not in dims

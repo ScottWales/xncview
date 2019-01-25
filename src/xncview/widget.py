@@ -62,6 +62,7 @@ class DimensionWidget(QW.QWidget):
         self.textbox.returnPressed.connect(self._update_from_value)
 
         self.slider.setValue(0)
+        #self.textbox.setText(str(self.dimension[0].values))
 
         main_layout.addWidget(self.title)
         main_layout.addWidget(self.textbox)
@@ -142,6 +143,23 @@ class ColorBarWidget(QW.QWidget):
             kwargs['vmin'] = self.bounds[0]
             kwargs['vmax'] = self.bounds[1]
         return kwargs
+
+
+def _get_variable_dims(variable):
+    """
+    Get the available dimensions for the current variable
+    """
+    all_dims = set(variable.coords.keys()).union(variable.dims)
+
+    cleaned = set(all_dims)
+    for d in all_dims:
+        if variable[d].size == 1:
+            cleaned.remove(d)
+        if variable[d].ndim > 2:
+            cleaned.remove(d)
+
+    return cleaned
+
 
 
 class Widget(QW.QWidget):
@@ -229,11 +247,7 @@ class Widget(QW.QWidget):
 
 
     def _get_variable_dims(self):
-        """
-        Get the available dimensions for the current variable
-        """
-        return set(self.variable.coords.keys()).union(self.variable.dims)
-
+        return _get_variable_dims(self.variable)
 
     def change_variable(self, index=0):
         """
@@ -330,10 +344,10 @@ class Widget(QW.QWidget):
                 plot_args['transform'] = cartopy.crs.PlateCarree()
                 self.axis.coastlines(alpha=0.2)
 
-            # # Flatten passive dims
-            # for d in self.variable.coords:
-            #     if d not in [x,y]:
-            #         v = v.isel({d:self.dims[d].value()})
+            # Flatten passive dims
+            for d in self.dims:
+                if d in self.variable.dims and d not in [x,y] and d not in self.variable[x].dims and d not in self.variable[y].dims:
+                    v = v.isel({d:self.dims[d].value()})
 
             # Plot data
             try:
@@ -344,6 +358,7 @@ class Widget(QW.QWidget):
                         )
             except Exception as e:
                 print(e)
+                raise
 
         self.canvas.draw()
         self.colorbar.redraw(plot)
