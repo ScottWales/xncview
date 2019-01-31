@@ -351,8 +351,9 @@ class Widget(QW.QWidget):
 
             # Plot data
             try:
-                plot = v.plot.pcolormesh(x, y, ax=self.axis,
-                        add_colorbar=False,
+                x = _get_bounds(self.dataset, x)
+                y = _get_bounds(self.dataset, y)
+                plot = self.axis.pcolormesh(x, y, v,
                         **plot_args,
                         **self.colorbar.get_plot_args(),
                         )
@@ -362,3 +363,40 @@ class Widget(QW.QWidget):
 
         self.canvas.draw()
         self.colorbar.redraw(plot)
+
+
+def _get_bounds(dataset, dim):
+    """
+    Get bounds of a dim
+    """
+    dim = dataset[dim]
+    bound = dim.attrs.get('bounds',None)
+
+    if bound is None:
+        return x
+
+    # Switch to DataArray
+    bound = dataset[bound]
+
+    # Get the bound dimension
+    bound_d = set(bound.dims) - set(dim.dims)
+    if len(bound_d) != 1:
+        raise Exception(f'Bad bounds for dimension "{dim.name}"')
+    bound_d = bound_d.pop()
+
+    if dim.ndim == 1 and bound.sizes[bound_d] != 2:
+        raise Exception(f'Bad bounds for dimension "{dim.name}"')
+    elif dim.ndim == 2 and bound.sizes[bound_d] != 4:
+        raise Exception(f'Bad bounds for dimension "{dim.name}"')
+
+    if dim.ndim == 1:
+        return numpy.concatenate([bound.isel({bound_d:0}), bound.isel({bound_d:1})[-1:]])
+
+    if dim.ndim == 2:
+        A = numpy.concatenate([bound.isel({bound_d:0}),
+                               bound.isel({bound_d:3})[-1:, :]], axis=0)
+        B = numpy.concatenate([bound.isel({bound_d:1})[:,-1:],
+                               bound.isel({bound_d:2})[-1:,-1:]], axis=0)
+        return numpy.concatenate([A,B], axis=1)
+
+    raise Exception(f'Dimensions higher than two not implemented')

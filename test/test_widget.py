@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from xncview.widget import Widget, _get_variable_dims
+from xncview.widget import Widget, _get_variable_dims, _get_bounds
 
 import xarray
 import numpy
@@ -92,3 +92,19 @@ def test_get_dims(qtbot):
     assert 'x' in dims
     assert 't' in dims
     assert 'z' not in dims
+
+def test_get_bounds():
+    ds = xarray.Dataset({
+        'a': (['x','y'], numpy.zeros((2,2))),
+        'x': (['x'], [1,2], {'bounds': 'x_b'}),
+        'x_b': (['x','b'], [[0.5,1.5], [1.5,2.5]]),
+
+        'c': (['x','y'], [[1, 2], [1, 2]], {'bounds': 'c_b'}), 
+        })
+    ds['c_b'] = (['cn','x','y'],numpy.stack([ds.c - 0.5, ds.c + 0.5, ds.c + 0.5, ds.c - 0.5]))
+
+    b = _get_bounds(ds, 'x')
+    numpy.testing.assert_equal(b, [0.5,1.5,2.5])
+
+    b = _get_bounds(ds, 'c')
+    numpy.testing.assert_equal(b, [[0.5,1.5,2.5],[0.5,1.5,2.5],[0.5,1.5,2.5]])

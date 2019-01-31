@@ -67,9 +67,14 @@ def main_oasis():
     mask = masks[f'{args.grid}.msk']
 
     lat.attrs['axis'] = 'Y'
+    lat.attrs['bounds'] = f'{args.grid}.cla'
     lon.attrs['axis'] = 'X'
+    lon.attrs['bounds'] = f'{args.grid}.clo'
 
-    new_vars = {}
+    new_vars = {
+        f'{args.grid}.cla': grids[f'{args.grid}.cla'],        
+        f'{args.grid}.clo': grids[f'{args.grid}.clo'],        
+    }
     for v, da in dataset.data_vars.items():
         reshaped = xarray.DataArray(
                 da.values.reshape(dataset.time.size, mask.shape[0], mask.shape[1]),
