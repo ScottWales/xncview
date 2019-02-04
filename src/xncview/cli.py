@@ -55,9 +55,13 @@ class Preprocessor:
 
         Default implementation sets up chunking
         """
-        dataset = xarray.open_mfdataset(self.args.input, chunks={})
+        try:
+            dataset = xarray.open_mfdataset(self.args.input, chunks={}, data_vars='minimal')
+        except ValueError: # Decoding error?
+            dataset = xarray.open_mfdataset(self.args.input, chunks={}, data_vars='minimal', decode_cf=False)
+
         if 'time' in dataset.dims.keys():
-            dataset.chunk({'time':1})
+            dataset = dataset.chunk({'time':1})
 
         return dataset
 
@@ -123,9 +127,34 @@ class PreprocessorOasis(Preprocessor):
         return ds_out
 
 
+class PreprocessorMom(Preprocessor):
+    description = """
+    Visualise a MOM file
+    """
+    def _init_parser(self, parser):
+        parser.add_argument('--grid', '-g', required=True, help="MOM grid_spec.nc file")
+        return parser
+
+    def _do_preprocess(self, dataset):
+        gridspec = xarray.open_dataset(self.args.grid)
+
+        dataset = dataset.rename({d: d.lower() for d in dataset.dims})
+        gridspec = gridspec.rename({d: d.lower() for d in gridspec.dims})
+
+        dataset.coords['T_lat'] = gridspec.y_T
+        dataset.coords['T_lon'] = gridspec.x_T
+        dataset['T_lat_corner'] = gridspec.y_vert_T
+        dataset['T_lon_corner'] = gridspec.x_vert_T
+        dataset.T_lat.attrs['bounds'] = 'T_lat_corner'
+        dataset.T_lon.attrs['bounds'] = 'T_lon_corner'
+
+        return dataset
+
+
 preprocessors = {
     'none': Preprocessor,
     'oasis': PreprocessorOasis,
+    'mom': PreprocessorMom,
     }
 
 
@@ -140,6 +169,7 @@ def main():
 
     # Hand over to the pre-processor
     dataset = preprocessors[args.preprocessor](parser, pp_args)()
+    print(dataset)
 
     xncview(dataset)
 

@@ -114,6 +114,9 @@ class ColorBarWidget(QW.QWidget):
         main_layout.addWidget(self.canvas)
         main_layout.addWidget(self.lowerTextBox)
 
+        self.upperTextBox.returnPressed.connect(self._update_bounds)
+        self.lowerTextBox.returnPressed.connect(self._update_bounds)
+
         #: Colour bar limits
         self.bounds = [numpy.nan, numpy.nan]
 
@@ -139,11 +142,16 @@ class ColorBarWidget(QW.QWidget):
         kwargs = {}
         if self.bounds[0] < 0 < self.bounds[1]:
             kwargs['vmax'] = numpy.abs(self.bounds).max()
+            kwargs['vmin'] = -kwargs['vmax']
         else:
             kwargs['vmin'] = self.bounds[0]
             kwargs['vmax'] = self.bounds[1]
         return kwargs
 
+    def _update_bounds(self):
+        values = [self.lowerTextBox.text(), self.upperTextBox.text()]
+        self.bounds = numpy.array(values, dtype=self.bounds.dtype)
+        self.valueChanged.emit(self.bounds[0], self.bounds[1])
 
 def _get_variable_dims(variable):
     """
@@ -217,6 +225,7 @@ class Widget(QW.QWidget):
         self.varlist.currentIndexChanged.connect(self.change_variable)
         self.xdim.activated.connect(self.change_axes)
         self.ydim.activated.connect(self.change_axes)
+        self.colorbar.valueChanged.connect(self.redraw)
 
         #: Currently active variable
         self.variable = None
@@ -262,7 +271,10 @@ class Widget(QW.QWidget):
         print('\nVariable details:')
         print(self.variable)
 
-        self.colorbar.setBounds(dask.array.stack([self.variable.min(), self.variable.max()]).compute())
+        sample = self.variable
+        if 'time' in sample.dims:
+            sample = sample.isel(time=0)
+        self.colorbar.setBounds(dask.array.stack([sample.min(), sample.max()]).compute())
 
         if self._get_variable_dims() != old_dims:
             self.update_dimensions()
@@ -282,8 +294,8 @@ class Widget(QW.QWidget):
 
         x = 0
         lon = identify_lon(self.variable)
-        if lon is not None:
-            x = self.xdim.findText(lon)
+        if len(lon) > 0:
+            x = self.xdim.findText(lon[0])
         self.xdim.setCurrentIndex(x)
 
         self.ydim.clear()
@@ -291,8 +303,8 @@ class Widget(QW.QWidget):
 
         y = 1
         lat = identify_lat(self.variable)
-        if lat is not None:
-            y = self.ydim.findText(lat)
+        if len(lat) > 0:
+            y = self.ydim.findText(lat[0])
         self.ydim.setCurrentIndex(y)
 
         self.change_axes()
@@ -316,12 +328,12 @@ class Widget(QW.QWidget):
         lon = identify_lon(self.variable)
         lat = identify_lat(self.variable)
 
-        if not isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x == lon and y == lat):
+        if not isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x in lon and y in lat):
             # Convert from standard axes to cartopy
             self.axis.remove()
             self.axis = self.canvas.figure.subplots(subplot_kw={
                 'projection': cartopy.crs.PlateCarree(central_longitude=180.0)})
-        elif isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x != lon or y != lat):
+        elif isinstance(self.axis, cartopy.mpl.geoaxes.GeoAxes) and (x not in lon or y not in lat):
             # Convert from cartopy to standard axes
             self.axis.remove()
             self.axis = self.canvas.figure.subplots()
@@ -353,13 +365,14 @@ class Widget(QW.QWidget):
             try:
                 x = _get_bounds(self.dataset, x)
                 y = _get_bounds(self.dataset, y)
+
                 plot = self.axis.pcolormesh(x, y, v,
                         **plot_args,
                         **self.colorbar.get_plot_args(),
                         )
-            except Exception as e:
+            except TypeError as e:
                 print(e)
-                raise
+                pass
 
         self.canvas.draw()
         self.colorbar.redraw(plot)

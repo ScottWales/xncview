@@ -34,6 +34,7 @@ def xncview(dataset):
         QApp = QW.QApplication(sys.argv)
 
     widget = Widget(dataset)
+    widget.resize(1200,800)
     widget.show()
 
     return QApp.exec_()

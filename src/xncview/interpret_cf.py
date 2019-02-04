@@ -46,12 +46,7 @@ def identify_lat(variable):
             
             lat_dims.append(d)
 
-    if len(lat_dims) > 1:
-        raise Exception("Multiple potential latitude dimensions")
-    elif len(lat_dims) < 1:
-        return None
-    else:
-        return lat_dims[0]
+    return lat_dims
 
 
 def identify_lon(variable):
@@ -65,12 +60,7 @@ def identify_lon(variable):
             
             lon_dims.append(d)
 
-    if len(lon_dims) > 1:
-        raise Exception("Multiple potential longitude dimensions")
-    elif len(lon_dims) < 1:
-        return None
-    else:
-        return lon_dims[0]
+    return lon_dims
 
 
 def classify_vars(dataset):
