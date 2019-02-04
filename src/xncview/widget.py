@@ -62,7 +62,7 @@ class DimensionWidget(QW.QWidget):
         self.textbox.returnPressed.connect(self._update_from_value)
 
         self.slider.setValue(0)
-        #self.textbox.setText(str(self.dimension[0].values))
+        self.textbox.setText(str(self.dimension[0].values))
 
         main_layout.addWidget(self.title)
         main_layout.addWidget(self.textbox)
@@ -373,7 +373,7 @@ def _get_bounds(dataset, dim):
     bound = dim.attrs.get('bounds',None)
 
     if bound is None:
-        return x
+        return dim
 
     # Switch to DataArray
     bound = dataset[bound]
